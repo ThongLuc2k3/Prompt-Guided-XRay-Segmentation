@@ -9,7 +9,9 @@ import datetime
 
 # Import Dataset và Model của bạn
 from dataset import BTXRD_Dataset
-from models.networks.unet_2D import unet_2D
+# from models.networks.unet_2D import unet_2D
+from models.networks.prompt_unet_2D import Prompt_Att_UNet_2D
+
 
 # ==========================================
 # 1. HỆ THỐNG HÀM MẤT MÁT (Chuẩn hóa công thức)
@@ -48,10 +50,10 @@ def calculate_batch_metrics_sum(pred, target, smooth=1e-5):
 # 3. CẤU HÌNH & HỆ THỐNG GHI LOG
 # ==========================================
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 EPOCHS = 50
 LR = 1e-4
-IMG_SIZE = 256
+IMG_SIZE = 512
 
 def setup_logger():
     os.makedirs("logs", exist_ok=True)
@@ -76,14 +78,27 @@ def main():
     logger.info("="*95)
 
     # Khởi tạo Dataloader
-    train_dataset = BTXRD_Dataset(image_dir="dataset_BTXRD/train/images", mask_dir="dataset_BTXRD/train/masks", img_size=IMG_SIZE, is_train=True)
+    train_dataset = BTXRD_Dataset(
+        image_dir="dataset_BTXRD/train/images", 
+        mask_dir="dataset_BTXRD/train/masks", 
+        json_dir="dataset_BTXRD/train/annotations",  # <--- Bổ sung dòng này
+        img_size=IMG_SIZE, 
+        is_train=True
+    )
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-    val_dataset = BTXRD_Dataset(image_dir="dataset_BTXRD/val/images", mask_dir="dataset_BTXRD/val/masks", img_size=IMG_SIZE, is_train=False)
+    val_dataset = BTXRD_Dataset(
+        image_dir="dataset_BTXRD/val/images", 
+        mask_dir="dataset_BTXRD/val/masks", 
+        json_dir="dataset_BTXRD/val/annotations",    # <--- Bổ sung dòng này
+        img_size=IMG_SIZE, 
+        is_train=False
+    )
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # Khởi tạo Model, Loss, Optimizer
-    model = unet_2D(in_channels=1, n_classes=1).to(DEVICE)
+    #model = unet_2D(in_channels=1, n_classes=1).to(DEVICE)
+    model = Prompt_Att_UNet_2D(in_channels=1, n_classes=1).to(DEVICE)
     criterion_bce = nn.BCEWithLogitsLoss()
     optimizer = optim.AdamW(model.parameters(), lr=LR)
 
@@ -96,10 +111,15 @@ def main():
         train_loss = 0
         
         loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [Train]")
-        for images, masks in loop:
-            images, masks = images.to(DEVICE), masks.to(DEVICE)
+        # for images, masks in loop:
+        #     images, masks = images.to(DEVICE), masks.to(DEVICE)
 
-            predictions = model(images)
+        #     predictions = model(images)
+        for images, masks, prompts in loop:
+            images, masks, prompts = images.to(DEVICE), masks.to(DEVICE), prompts.to(DEVICE)
+            
+            # Truyền cả ảnh và prompt vào
+            predictions = model(images, prompts)
             loss = criterion_bce(predictions, masks) + dice_loss(predictions, masks)
 
             optimizer.zero_grad()
@@ -118,12 +138,16 @@ def main():
         total_val_samples = 0 # Đếm tổng số ảnh thực tế
         
         with torch.no_grad():
-            for val_images, val_masks in val_loader:
-                val_images, val_masks = val_images.to(DEVICE), val_masks.to(DEVICE)
-                batch_size_current = val_images.size(0)
+            # for val_images, val_masks in val_loader:
+            #     val_images, val_masks = val_images.to(DEVICE), val_masks.to(DEVICE)
+            #     batch_size_current = val_images.size(0)
 
-                val_preds = model(val_images)
-                
+            #     val_preds = model(val_images)
+            for val_images, val_masks, val_prompts in val_loader:
+                val_images, val_masks, val_prompts = val_images.to(DEVICE), val_masks.to(DEVICE), val_prompts.to(DEVICE)
+                batch_size_current = val_images.size(0)
+                val_preds = model(val_images, val_prompts)
+                            
                 v_loss = criterion_bce(val_preds, val_masks) + dice_loss(val_preds, val_masks)
                 val_loss += v_loss.item()
                 

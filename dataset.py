@@ -8,7 +8,7 @@ import torchvision.transforms.functional as TF
 import random
 
 class BTXRD_Dataset(Dataset):
-    def __init__(self, image_dir, mask_dir, json_dir, img_size=256, is_train=True):
+    def __init__(self, image_dir, mask_dir, json_dir, img_size=512, is_train=True):
         self.image_dir = image_dir
         self.mask_dir = mask_dir
         self.json_dir = json_dir  # Thư mục mới chứa annotations
@@ -64,19 +64,30 @@ class BTXRD_Dataset(Dataset):
         if os.path.exists(json_path):
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # ==========================================
-                # CHÚ Ý: CHỈNH SỬA PHẦN NÀY CHO KHỚP VỚI JSON CỦA BẠN
-                # Giả sử JSON lưu dạng: {"box": [x_min, y_min, x_max, y_max]}
-                # ==========================================
-                try:
-                    # Hãy thay 'box' bằng cái key thực tế trong file json của bạn
-                    bbox = data['box'] 
-                    prompt_map = self.create_plateau_heatmap(bbox, orig_h, orig_w)
-                except KeyError:
-                    print(f"Không tìm thấy tọa độ box trong file {json_path}")
+                
+                # Quét qua tất cả các hình vẽ trong file LabelMe
+                for shape in data.get('shapes', []):
+                    # Chỉ lấy hình chữ nhật (Bounding Box)
+                    if shape['shape_type'] == 'rectangle':
+                        points = shape['points']
+                        # points có dạng: [[x1, y1], [x2, y2]]
+                        x1, y1 = points[0]
+                        x2, y2 = points[1]
+                        
+                        # Đề phòng lúc dùng chuột vẽ bị ngược hướng
+                        x_min, x_max = min(x1, x2), max(x1, x2)
+                        y_min, y_max = min(y1, y2), max(y1, y2)
+                        
+                        bbox = [x_min, y_min, x_max, y_max]
+                        
+                        # Tạo heatmap cho Box này
+                        single_heatmap = self.create_plateau_heatmap(bbox, orig_h, orig_w)
+                        
+                        # Cộng dồn vào bản đồ tổng (Dùng np.maximum để không bị vượt quá 1.0 nếu 2 box đè lên nhau)
+                        prompt_map = np.maximum(prompt_map, single_heatmap)
         else:
             # Nếu lỡ có ảnh không có file json, prompt mặc định là 0 (Không định hướng)
-            pass 
+            pass
 
         # 3. Resize đồng loạt về kích thước chuẩn
         image = cv2.resize(image, (self.img_size, self.img_size))
@@ -119,5 +130,5 @@ if __name__ == "__main__":
     
     print("Image batch shape:", images.shape)
     print("Mask batch shape:", masks.shape)
-    print("Prompt batch shape:", prompts.shape) # Phải là [4, 1, 256, 256]
+    print("Prompt batch shape:", prompts.shape) # Phải là [4, 1, 256, 256 or 512..]
     print(f"Giá trị đỉnh của một Prompt: {prompts[0].max().item():.2f}")
