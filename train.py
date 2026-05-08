@@ -95,7 +95,7 @@ def main():
         model.train()
         train_loss = 0
         
-        loop = tqdm(train_loader, desc=f"Epoch {epoch+1:03d}/{EPOCHS} [Train]")
+        loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [Train]")
         for images, masks in loop:
             images, masks = images.to(DEVICE), masks.to(DEVICE)
 
@@ -146,7 +146,7 @@ def main():
         # --- PHA 3: LƯU TRỌNG SỐ & IN LOG KẾT QUẢ ---
         torch.save(model.state_dict(), "checkpoints/att_unet_last.pth")
         
-        log_str = (f"Epoch {epoch+1:03d} | Train Loss: {train_loss_avg:.4f} | "
+        log_str = (f"Epoch {epoch+1} | Train Loss: {train_loss_avg:.4f} | "
                    f"Val Loss: {val_loss_avg:.4f} | Dice: {val_dice_avg:.4f} | "
                    f"IoU: {val_iou_avg:.4f} | Pre: {val_pre_avg:.4f} | Rec: {val_rec_avg:.4f}")
         
