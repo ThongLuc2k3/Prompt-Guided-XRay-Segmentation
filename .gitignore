@@ -1,0 +1,16 @@
+# Bỏ qua môi trường ảo
+.venv/
+venv/
+env/
+
+# Bỏ qua thư mục trọng số (vì nó rất nặng)
+checkpoints/
+
+# Bỏ qua dữ liệu (dữ liệu đã đẩy lên Drive)
+dataset_BTXRD/
+dataset_BTXRD.zip
+
+# Bỏ qua các file cache của Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
