@@ -1,0 +1,54 @@
+===============================================================================================
+🚀 KHỞI ĐỘNG HUẤN LUYỆN BASELINE - THIẾT BỊ: cuda
+Batch Size: 4 | Epochs: 50 | LR: 0.0001
+===============================================================================================
+🥇 [BEST] Epoch 1 | Train Loss: 1.4302 | Val Loss: 1.2480 | Dice: 0.6641 | IoU: 0.5380 | Pre: 0.5652 | Rec: 0.8448
+🥇 [BEST] Epoch 2 | Train Loss: 1.1788 | Val Loss: 1.1474 | Dice: 0.6832 | IoU: 0.5586 | Pre: 0.5937 | Rec: 0.8516
+🥇 [BEST] Epoch 3 | Train Loss: 1.0854 | Val Loss: 1.0330 | Dice: 0.7348 | IoU: 0.6154 | Pre: 0.6761 | Rec: 0.8500
+🥇 [BEST] Epoch 4 | Train Loss: 1.0044 | Val Loss: 0.9504 | Dice: 0.7549 | IoU: 0.6372 | Pre: 0.6822 | Rec: 0.8753
+🥇 [BEST] Epoch 5 | Train Loss: 0.9311 | Val Loss: 0.8794 | Dice: 0.7806 | IoU: 0.6640 | Pre: 0.6991 | Rec: 0.9107
+🥇 [BEST] Epoch 6 | Train Loss: 0.8643 | Val Loss: 0.8007 | Dice: 0.7845 | IoU: 0.6709 | Pre: 0.7190 | Rec: 0.8905
+🥇 [BEST] Epoch 7 | Train Loss: 0.7972 | Val Loss: 0.7414 | Dice: 0.7939 | IoU: 0.6751 | Pre: 0.7057 | Rec: 0.9386
+🥇 [BEST] Epoch 8 | Train Loss: 0.7304 | Val Loss: 0.6821 | Dice: 0.7979 | IoU: 0.6839 | Pre: 0.7562 | Rec: 0.8828
+🥇 [BEST] Epoch 9 | Train Loss: 0.6639 | Val Loss: 0.6008 | Dice: 0.8157 | IoU: 0.7055 | Pre: 0.7517 | Rec: 0.9264
+Epoch 10 | Train Loss: 0.5985 | Val Loss: 0.5292 | Dice: 0.8140 | IoU: 0.7052 | Pre: 0.7464 | Rec: 0.9370
+🥇 [BEST] Epoch 11 | Train Loss: 0.5342 | Val Loss: 0.4597 | Dice: 0.8279 | IoU: 0.7221 | Pre: 0.7518 | Rec: 0.9517
+🥇 [BEST] Epoch 12 | Train Loss: 0.4671 | Val Loss: 0.4029 | Dice: 0.8294 | IoU: 0.7235 | Pre: 0.7639 | Rec: 0.9379
+🥇 [BEST] Epoch 13 | Train Loss: 0.4075 | Val Loss: 0.3557 | Dice: 0.8362 | IoU: 0.7284 | Pre: 0.7649 | Rec: 0.9449
+🥇 [BEST] Epoch 14 | Train Loss: 0.3528 | Val Loss: 0.3089 | Dice: 0.8467 | IoU: 0.7439 | Pre: 0.7995 | Rec: 0.9254
+🥇 [BEST] Epoch 15 | Train Loss: 0.3106 | Val Loss: 0.2650 | Dice: 0.8538 | IoU: 0.7539 | Pre: 0.8268 | Rec: 0.9044
+🥇 [BEST] Epoch 16 | Train Loss: 0.2767 | Val Loss: 0.2383 | Dice: 0.8572 | IoU: 0.7577 | Pre: 0.8403 | Rec: 0.8924
+🥇 [BEST] Epoch 17 | Train Loss: 0.2474 | Val Loss: 0.2156 | Dice: 0.8641 | IoU: 0.7674 | Pre: 0.8252 | Rec: 0.9213
+🥇 [BEST] Epoch 18 | Train Loss: 0.2259 | Val Loss: 0.1921 | Dice: 0.8694 | IoU: 0.7755 | Pre: 0.8627 | Rec: 0.8875
+Epoch 19 | Train Loss: 0.2096 | Val Loss: 0.1844 | Dice: 0.8670 | IoU: 0.7723 | Pre: 0.8484 | Rec: 0.8996
+Epoch 20 | Train Loss: 0.1963 | Val Loss: 0.1828 | Dice: 0.8665 | IoU: 0.7720 | Pre: 0.8461 | Rec: 0.9015
+🥇 [BEST] Epoch 21 | Train Loss: 0.1858 | Val Loss: 0.1635 | Dice: 0.8727 | IoU: 0.7816 | Pre: 0.8629 | Rec: 0.8965
+Epoch 22 | Train Loss: 0.1807 | Val Loss: 0.1654 | Dice: 0.8716 | IoU: 0.7787 | Pre: 0.8584 | Rec: 0.8977
+🥇 [BEST] Epoch 23 | Train Loss: 0.1722 | Val Loss: 0.1597 | Dice: 0.8737 | IoU: 0.7822 | Pre: 0.8604 | Rec: 0.8978
+Epoch 24 | Train Loss: 0.1675 | Val Loss: 0.1586 | Dice: 0.8726 | IoU: 0.7808 | Pre: 0.8732 | Rec: 0.8854
+Epoch 25 | Train Loss: 0.1623 | Val Loss: 0.1560 | Dice: 0.8727 | IoU: 0.7809 | Pre: 0.8453 | Rec: 0.9148
+🥇 [BEST] Epoch 26 | Train Loss: 0.1574 | Val Loss: 0.1515 | Dice: 0.8761 | IoU: 0.7858 | Pre: 0.8601 | Rec: 0.9028
+🥇 [BEST] Epoch 27 | Train Loss: 0.1526 | Val Loss: 0.1465 | Dice: 0.8802 | IoU: 0.7920 | Pre: 0.8831 | Rec: 0.8875
+Epoch 28 | Train Loss: 0.1517 | Val Loss: 0.1522 | Dice: 0.8734 | IoU: 0.7830 | Pre: 0.8694 | Rec: 0.8901
+Epoch 29 | Train Loss: 0.1490 | Val Loss: 0.1470 | Dice: 0.8780 | IoU: 0.7886 | Pre: 0.8768 | Rec: 0.8891
+Epoch 30 | Train Loss: 0.1457 | Val Loss: 0.1529 | Dice: 0.8717 | IoU: 0.7792 | Pre: 0.8338 | Rec: 0.9250
+🥇 [BEST] Epoch 31 | Train Loss: 0.1450 | Val Loss: 0.1431 | Dice: 0.8816 | IoU: 0.7945 | Pre: 0.8728 | Rec: 0.9007
+Epoch 32 | Train Loss: 0.1393 | Val Loss: 0.1451 | Dice: 0.8771 | IoU: 0.7880 | Pre: 0.8694 | Rec: 0.8949
+Epoch 33 | Train Loss: 0.1360 | Val Loss: 0.1438 | Dice: 0.8791 | IoU: 0.7904 | Pre: 0.8719 | Rec: 0.8964
+🥇 [BEST] Epoch 34 | Train Loss: 0.1332 | Val Loss: 0.1383 | Dice: 0.8850 | IoU: 0.7994 | Pre: 0.8703 | Rec: 0.9097
+Epoch 35 | Train Loss: 0.1331 | Val Loss: 0.1465 | Dice: 0.8759 | IoU: 0.7866 | Pre: 0.8918 | Rec: 0.8708
+Epoch 36 | Train Loss: 0.1300 | Val Loss: 0.1393 | Dice: 0.8830 | IoU: 0.7970 | Pre: 0.8726 | Rec: 0.9039
+Epoch 37 | Train Loss: 0.1292 | Val Loss: 0.1365 | Dice: 0.8848 | IoU: 0.7994 | Pre: 0.8839 | Rec: 0.8959
+Epoch 38 | Train Loss: 0.1260 | Val Loss: 0.1429 | Dice: 0.8788 | IoU: 0.7913 | Pre: 0.8827 | Rec: 0.8849
+Epoch 39 | Train Loss: 0.1237 | Val Loss: 0.1474 | Dice: 0.8752 | IoU: 0.7852 | Pre: 0.8940 | Rec: 0.8671
+Epoch 40 | Train Loss: 0.1235 | Val Loss: 0.1470 | Dice: 0.8750 | IoU: 0.7852 | Pre: 0.9037 | Rec: 0.8585
+Epoch 41 | Train Loss: 0.1242 | Val Loss: 0.1380 | Dice: 0.8824 | IoU: 0.7962 | Pre: 0.8885 | Rec: 0.8863
+Epoch 42 | Train Loss: 0.1215 | Val Loss: 0.1377 | Dice: 0.8839 | IoU: 0.7982 | Pre: 0.8823 | Rec: 0.8962
+Epoch 43 | Train Loss: 0.1185 | Val Loss: 0.1354 | Dice: 0.8842 | IoU: 0.7993 | Pre: 0.8917 | Rec: 0.8873
+Epoch 44 | Train Loss: 0.1167 | Val Loss: 0.1513 | Dice: 0.8717 | IoU: 0.7798 | Pre: 0.8929 | Rec: 0.8628
+🥇 [BEST] Epoch 45 | Train Loss: 0.1149 | Val Loss: 0.1362 | Dice: 0.8851 | IoU: 0.8001 | Pre: 0.8810 | Rec: 0.8996
+Epoch 46 | Train Loss: 0.1117 | Val Loss: 0.1382 | Dice: 0.8817 | IoU: 0.7961 | Pre: 0.8834 | Rec: 0.8909
+Epoch 47 | Train Loss: 0.1103 | Val Loss: 0.1412 | Dice: 0.8797 | IoU: 0.7933 | Pre: 0.8736 | Rec: 0.8966
+Epoch 48 | Train Loss: 0.1118 | Val Loss: 0.1354 | Dice: 0.8840 | IoU: 0.7988 | Pre: 0.8911 | Rec: 0.8880
+Epoch 49 | Train Loss: 0.1080 | Val Loss: 0.1442 | Dice: 0.8775 | IoU: 0.7894 | Pre: 0.8953 | Rec: 0.8718
+Epoch 50 | Train Loss: 0.1066 | Val Loss: 0.1438 | Dice: 0.8779 | IoU: 0.7905 | Pre: 0.8972 | Rec: 0.8704
