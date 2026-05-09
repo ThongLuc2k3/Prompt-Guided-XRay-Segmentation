@@ -43,10 +43,45 @@ class BTXRD_Dataset(Dataset):
         image = torch.from_numpy(image).unsqueeze(0) # [1, H, W]
         mask = torch.from_numpy(mask).unsqueeze(0)   # [1, H, W]
 
-        # Data Augmentation đơn giản cho tập Train (Random Lật ngang)
-        if self.is_train and random.random() > 0.5:
-            image = TF.hflip(image)
-            mask = TF.hflip(mask)
+        # # Data Augmentation đơn giản cho tập Train (Random Lật ngang)
+        # if self.is_train and random.random() > 0.5:
+        #     image = TF.hflip(image)
+        #     mask = TF.hflip(mask)
+
+        # =======================================================
+        # DATA AUGMENTATION MẠNH HƠN
+        # =======================================================
+        if self.is_train:
+            # 1. Lật ngang (Horizontal Flip - 50%)
+            if random.random() > 0.5:
+                image = TF.hflip(image)
+                mask = TF.hflip(mask)
+                # prompt = TF.hflip(prompt) # Kéo theo Prompt
+                
+            # 2. Xoay ngẫu nhiên (Rotation: -10 đến +10 độ)
+            if random.random() > 0.5:
+                angle = random.uniform(-10, 10)
+                image = TF.rotate(image, angle, interpolation=TF.InterpolationMode.BILINEAR)
+                mask = TF.rotate(mask, angle, interpolation=TF.InterpolationMode.NEAREST)
+                # prompt = TF.rotate(prompt, angle, interpolation=TF.InterpolationMode.BILINEAR) # Dùng Bilinear để giữ độ mờ của viền Heatmap
+                
+            # 3. Phóng to/Thu nhỏ & Dịch chuyển (Affine Transform)
+            if random.random() > 0.5:
+                translate_x = int(random.uniform(-0.05, 0.05) * self.img_size)
+                translate_y = int(random.uniform(-0.05, 0.05) * self.img_size)
+                scale = random.uniform(0.9, 1.1)
+                
+                image = TF.affine(image, angle=0, translate=[translate_x, translate_y], scale=scale, shear=0, interpolation=TF.InterpolationMode.BILINEAR)
+                mask = TF.affine(mask, angle=0, translate=[translate_x, translate_y], scale=scale, shear=0, interpolation=TF.InterpolationMode.NEAREST)
+                # prompt = TF.affine(prompt, angle=0, translate=[translate_x, translate_y], scale=scale, shear=0, interpolation=TF.InterpolationMode.BILINEAR)
+
+            # 4. Nhiễu Bức Xạ (Độ sáng / Tương phản)
+            # ⚠️ LƯU Ý: CHỈ DÙNG CHO IMAGE, TUYỆT ĐỐI KHÔNG DÙNG CHO MASK HAY PROMPT
+            if random.random() > 0.5:
+                brightness = random.uniform(0.8, 1.2)
+                contrast = random.uniform(0.8, 1.2)
+                image = TF.adjust_brightness(image, brightness)
+                image = TF.adjust_contrast(image, contrast)
 
         return image, mask
 
