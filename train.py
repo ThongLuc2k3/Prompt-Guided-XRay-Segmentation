@@ -9,7 +9,7 @@ import datetime
 
 # Import Dataset và Model của bạn
 from dataset import BTXRD_Dataset
-from models.networks.unet_2D import unet_2D
+from models.networks.attention_unet_2D import Attention_UNet_2D
 
 # ==========================================
 # 1. HỆ THỐNG HÀM MẤT MÁT (Chuẩn hóa công thức)
@@ -83,7 +83,7 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # Khởi tạo Model, Loss, Optimizer
-    model = unet_2D(in_channels=1, n_classes=1).to(DEVICE)
+    model = Attention_UNet_2D(in_channels=1, n_classes=1).to(DEVICE)
     criterion_bce = nn.BCEWithLogitsLoss()
     optimizer = optim.AdamW(model.parameters(), lr=LR)
 
