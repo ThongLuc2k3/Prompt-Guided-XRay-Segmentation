@@ -4,8 +4,8 @@ venv/
 env/
 
 # Bỏ qua thư mục trọng số (vì nó rất nặng)
-checkpoints/
-
+checkpoint/
+logs/
 # Bỏ qua dữ liệu (dữ liệu đã đẩy lên Drive)
 dataset_BTXRD/
 dataset_BTXRD.zip
