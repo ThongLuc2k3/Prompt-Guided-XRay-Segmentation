@@ -101,7 +101,7 @@ def main():
     model = Prompt_Att_UNet_2D(in_channels=1, n_classes=1).to(DEVICE)
     criterion_bce = nn.BCEWithLogitsLoss()
     optimizer = optim.AdamW(model.parameters(), lr=LR)
-
+    scaler = torch.amp.GradScaler('cuda') # THÊM DÒNG NÀY ĐỂ BẬT MIXED PRECISION
     os.makedirs("checkpoints", exist_ok=True)
     best_val_dice = 0.0
 
@@ -118,13 +118,17 @@ def main():
         for images, masks, prompts in loop:
             images, masks, prompts = images.to(DEVICE), masks.to(DEVICE), prompts.to(DEVICE)
             
-            # Truyền cả ảnh và prompt vào
-            predictions = model(images, prompts)
-            loss = criterion_bce(predictions, masks) + dice_loss(predictions, masks)
-
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            
+            # Ép kiểu dữ liệu về Float16 (Bán độ chính xác) để giảm nửa VRAM
+            with torch.amp.autocast('cuda'):
+                predictions = model(images, prompts)
+                loss = criterion_bce(predictions, masks) + dice_loss(predictions, masks)
+
+            # Backward bằng Scaler
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             train_loss += loss.item()
             loop.set_postfix(loss=loss.item())
