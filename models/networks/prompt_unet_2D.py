@@ -7,56 +7,39 @@ from .utils import unetConv2
 from models.layers.grid_attention_layer import GridAttentionBlock2D
 
 # ================================================================
-# 1. KHỐI UPSAMPLING TÍCH HỢP PROMPT VÀ ATTENTION
+# 1. KHỐI UPSAMPLING TÍCH HỢP PROMPT VÀ Swin Transformer
 # ================================================================
+from models.layers.cross_attention_layer import PromptCrossAttention2D # Nhớ import file vừa tạo
+
 class unetUp_PromptAttention(nn.Module):
     def __init__(self, skip_channels, gating_channels, out_channels):
         super(unetUp_PromptAttention, self).__init__()
         
-        # 1. Cổng Attention chuẩn (ĐÃ SỬA LỖI 3D CỦA TÁC GIẢ)
-        self.attention = GridAttentionBlock2D(in_channels=skip_channels, 
-                                              gating_channels=gating_channels, 
-                                              inter_channels=skip_channels // 2,
-                                              sub_sample_factor=(2, 2)) # <--- THÊM DÒNG NÀY
-        
-        # 2. Bộ mã hóa Prompt (Prompt Encoder)
-        self.prompt_encoder = nn.Sequential(
-            nn.Conv2d(1, gating_channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(gating_channels),
-            nn.ReLU(inplace=True)
+        # THAY THẾ Ở ĐÂY: Dùng Cross-Attention thay vì Attention Gate tuyến tính
+        # Gating/Skip đóng vai trò Image (img_channels), Prompt là prompt_channels
+        self.cross_attention = PromptCrossAttention2D(
+            img_channels=skip_channels, 
+            prompt_channels=1, # Prompt đầu vào chỉ có 1 kênh (Heatmap)
+            embed_dim=skip_channels // 2
         )
         
-        # 3. Mạng giải mã chuẩn
+        # Bộ Upsampling chuẩn
         self.up = nn.ConvTranspose2d(gating_channels, skip_channels, kernel_size=4, stride=2, padding=1)
         self.conv = unetConv2(skip_channels * 2, out_channels, is_batchnorm=True)
-        
+
     def forward(self, skip, gating, prompt):
-        # 1. Resize Prompt Heatmap về bằng kích thước của tín hiệu Gating
-        p_resized = F.interpolate(prompt, size=gating.shape[2:], mode='bilinear', align_corners=False)
+        # 1. Thu nhỏ Prompt cho khớp kích thước Skip
+        p_resized = F.interpolate(prompt, size=skip.shape[2:], mode='bilinear', align_corners=False)
         
-        # 2. Mã hóa Prompt
-        p_encoded = self.prompt_encoder(p_resized)
+        # 2. 🔥 GIAO TRANH Q-K-V 🔥
+        # Để Skip (đặc trưng ảnh sắc nét) làm Image, Prompt làm Query
+        skip_attended = self.cross_attention(img_features=skip, prompt_features=p_resized)
         
-        # 3. FUSION: Trộn Prompt vào Tín hiệu Gating
-        g_fused = gating + p_encoded
-        
-        # 4. Lọc Skip Connection qua cổng Attention (bị điều khiển bởi G_fused)
-        skip_att = self.attention(skip, g_fused)
-        
-        # Xử lý trường hợp code gốc trả về tuple (gated_feature, attention_map)
-        if isinstance(skip_att, tuple):
-            skip_att = skip_att[0]
-            
-        # 5. Upsample tín hiệu Gating GỐC (giữ nguyên luồng ngữ nghĩa)
+        # 3. Phóng to Gating từ dưới lên
         up_gating = self.up(gating)
         
-        # Căn chỉnh kích thước nếu bị lệch pixel do padding
-        offset = up_gating.size()[2] - skip_att.size()[2]
-        pad = 2 * [offset // 2, offset // 2]
-        skip_att = F.pad(skip_att, pad)
-        
-        # 6. Nối (Concat) và Conv như U-Net chuẩn
-        out = self.conv(torch.cat([skip_att, up_gating], dim=1))
+        # 4. Nối và Conv
+        out = self.conv(torch.cat([skip_attended, up_gating], dim=1))
         return out
 
 # ================================================================
