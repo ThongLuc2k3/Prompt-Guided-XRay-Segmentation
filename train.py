@@ -7,51 +7,32 @@ from tqdm import tqdm
 import logging
 import datetime
 
-# Import Dataset và Model của bạn
 from dataset import BTXRD_Dataset
-# from models.networks.unet_2D import unet_2D
-from models.networks.prompt_unet_2D import Prompt_Att_UNet_2D
+from models.networks.prompt_unet_2D import PGA_UNet  # Import đúng tên Class
 
-
-# ==========================================
-# 1. HỆ THỐNG HÀM MẤT MÁT (Chuẩn hóa công thức)
-# ==========================================
+# Hàm Loss và Metrics giữ nguyên như của bạn vì logic tính tổng chia sau là cực chuẩn
 def dice_loss(pred, target, smooth=1e-5):
     pred_soft = torch.sigmoid(pred)
-    # Tính theo từng ảnh trong batch (dim=(1,2,3) vì tensor [B, C, H, W])
     intersection = (pred_soft * target).sum(dim=(1,2,3))
     union = pred_soft.sum(dim=(1,2,3)) + target.sum(dim=(1,2,3))
-    
     dice = (2. * intersection + smooth) / (union + smooth)
     return 1 - dice.mean()
 
-# ==========================================
-# 2. HỆ THỐNG ĐỘ ĐO THỰC TẾ (Khắc phục Bias Batch)
-# ==========================================
 def calculate_batch_metrics_sum(pred, target, smooth=1e-5):
-    """Tính toán và trả về TỔNG ĐIỂM của toàn bộ ảnh trong batch, không lấy trung bình"""
     pred_binary = (torch.sigmoid(pred) > 0.5).float()
-    
-    # Tính True Positive, False Positive, False Negative theo từng ảnh
     tp = (pred_binary * target).sum(dim=(1,2,3))
     fp = (pred_binary * (1 - target)).sum(dim=(1,2,3))
     fn = ((1 - pred_binary) * target).sum(dim=(1,2,3))
     
-    # Tối ưu IoU theo công thức tp + fp + fn
     dice_score = (2. * tp + smooth) / (2. * tp + fp + fn + smooth)
     iou_score = (tp + smooth) / (tp + fp + fn + smooth)
     precision = tp / (tp + fp + smooth)
     recall = tp / (tp + fn + smooth)
-    
-    # Trả về tổng điểm của batch này
     return dice_score.sum().item(), iou_score.sum().item(), precision.sum().item(), recall.sum().item()
 
-# ==========================================
-# 3. CẤU HÌNH & HỆ THỐNG GHI LOG
-# ==========================================
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 4
-EPOCHS = 50
+EPOCHS = 100 # Tăng lên vì đã có Early Stopping
 LR = 1e-4
 IMG_SIZE = 512
 
@@ -59,71 +40,59 @@ def setup_logger():
     os.makedirs("logs", exist_ok=True)
     time_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = f"logs/training_baseline_{time_str}.log"
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
+    logging.basicConfig(level=logging.INFO, format='%(message)s',
+                        handlers=[logging.FileHandler(log_file, encoding='utf-8'), logging.StreamHandler()])
     return logging.getLogger()
 
 def main():
     logger = setup_logger()
     logger.info("="*95)
-    logger.info(f"🚀 KHỞI ĐỘNG HUẤN LUYỆN BASELINE - THIẾT BỊ: {DEVICE}")
-    logger.info(f"Batch Size: {BATCH_SIZE} | Epochs: {EPOCHS} | LR: {LR}")
+    logger.info(f"🚀 KHỞI ĐỘNG HUẤN LUYỆN PGA-UNET - THIẾT BỊ: {DEVICE}")
     logger.info("="*95)
 
-    # Khởi tạo Dataloader
     train_dataset = BTXRD_Dataset(
         image_dir="dataset_BTXRD/train/images", 
-        mask_dir="dataset_BTXRD/train/masks", 
-        json_dir="dataset_BTXRD/train/annotations",  # <--- Bổ sung dòng này
-        img_size=IMG_SIZE, 
-        is_train=True
+        json_dir="dataset_BTXRD/train/annotations", 
+        img_size=IMG_SIZE, is_train=True
     )
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     val_dataset = BTXRD_Dataset(
         image_dir="dataset_BTXRD/val/images", 
-        mask_dir="dataset_BTXRD/val/masks", 
-        json_dir="dataset_BTXRD/val/annotations",    # <--- Bổ sung dòng này
-        img_size=IMG_SIZE, 
-        is_train=False
+        json_dir="dataset_BTXRD/val/annotations", 
+        img_size=IMG_SIZE, is_train=False
     )
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    # Khởi tạo Model, Loss, Optimizer
-    #model = unet_2D(in_channels=1, n_classes=1).to(DEVICE)
-    model = Prompt_Att_UNet_2D(in_channels=1, n_classes=1).to(DEVICE)
+    model = PGA_UNet(in_channels=1, n_classes=1).to(DEVICE)
     criterion_bce = nn.BCEWithLogitsLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=LR)
+    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
+    
+    # Thêm Scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
 
     os.makedirs("checkpoints", exist_ok=True)
     best_val_dice = 0.0
+    patience_counter = 0
+    EARLY_STOPPING_PATIENCE = 15
 
     for epoch in range(EPOCHS):
-        # --- PHA 1: TRAIN ---
         model.train()
         train_loss = 0
-        
         loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [Train]")
-        # for images, masks in loop:
-        #     images, masks = images.to(DEVICE), masks.to(DEVICE)
-
-        #     predictions = model(images)
+        
         for images, masks, prompts in loop:
             images, masks, prompts = images.to(DEVICE), masks.to(DEVICE), prompts.to(DEVICE)
             
-            # Truyền cả ảnh và prompt vào
             predictions = model(images, prompts)
             loss = criterion_bce(predictions, masks) + dice_loss(predictions, masks)
 
             optimizer.zero_grad()
             loss.backward()
+            
+            # Gradient Clipping bảo vệ Attention Gate
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
 
             train_loss += loss.item()
@@ -131,55 +100,48 @@ def main():
 
         train_loss_avg = train_loss / len(train_loader)
 
-        # --- PHA 2: VALIDATION CHUẨN THỐNG KÊ ---
         model.eval()
-        val_loss = 0
-        sum_dice, sum_iou, sum_pre, sum_rec = 0, 0, 0, 0
-        total_val_samples = 0 # Đếm tổng số ảnh thực tế
+        val_loss, sum_dice, sum_iou, sum_pre, sum_rec = 0, 0, 0, 0, 0
+        total_val_samples = 0
         
         with torch.no_grad():
-            # for val_images, val_masks in val_loader:
-            #     val_images, val_masks = val_images.to(DEVICE), val_masks.to(DEVICE)
-            #     batch_size_current = val_images.size(0)
-
-            #     val_preds = model(val_images)
             for val_images, val_masks, val_prompts in val_loader:
                 val_images, val_masks, val_prompts = val_images.to(DEVICE), val_masks.to(DEVICE), val_prompts.to(DEVICE)
-                batch_size_current = val_images.size(0)
                 val_preds = model(val_images, val_prompts)
                             
                 v_loss = criterion_bce(val_preds, val_masks) + dice_loss(val_preds, val_masks)
                 val_loss += v_loss.item()
                 
-                # Lấy TỔNG điểm của batch
                 d, i, p, r = calculate_batch_metrics_sum(val_preds, val_masks)
-                sum_dice += d
-                sum_iou += i
-                sum_pre += p
-                sum_rec += r
+                sum_dice += d; sum_iou += i; sum_pre += p; sum_rec += r
+                total_val_samples += val_images.size(0)
                 
-                total_val_samples += batch_size_current
-                
-        # Tính điểm trung bình chuẩn xác bằng cách chia cho TỔNG SỐ ẢNH
-        val_loss_avg = val_loss / len(val_loader) # Loss thì vẫn chia theo số batch
+        val_loss_avg = val_loss / len(val_loader)
         val_dice_avg = sum_dice / total_val_samples
         val_iou_avg = sum_iou / total_val_samples
         val_pre_avg = sum_pre / total_val_samples
         val_rec_avg = sum_rec / total_val_samples
 
-        # --- PHA 3: LƯU TRỌNG SỐ & IN LOG KẾT QUẢ ---
-        torch.save(model.state_dict(), "checkpoints/att_unet_last.pth")
-        
-        log_str = (f"Epoch {epoch+1} | Train Loss: {train_loss_avg:.4f} | "
-                   f"Val Loss: {val_loss_avg:.4f} | Dice: {val_dice_avg:.4f} | "
-                   f"IoU: {val_iou_avg:.4f} | Pre: {val_pre_avg:.4f} | Rec: {val_rec_avg:.4f}")
+        # Điều chỉnh Learning Rate
+        scheduler.step(val_dice_avg)
+
+        torch.save(model.state_dict(), "checkpoints/pga_unet_last.pth")
+        log_str = (f"Epoch {epoch+1} | T_Loss: {train_loss_avg:.4f} | V_Loss: {val_loss_avg:.4f} | "
+                   f"Dice: {val_dice_avg:.4f} | IoU: {val_iou_avg:.4f} | LR: {optimizer.param_groups[0]['lr']}")
         
         if val_dice_avg > best_val_dice:
             best_val_dice = val_dice_avg
-            torch.save(model.state_dict(), "checkpoints/att_unet_best.pth")
+            torch.save(model.state_dict(), "checkpoints/pga_unet_best.pth")
             log_str = "🥇 [BEST] " + log_str
+            patience_counter = 0 # Reset đếm ngược
+        else:
+            patience_counter += 1
             
         logger.info(log_str)
+        
+        if patience_counter >= EARLY_STOPPING_PATIENCE:
+            logger.info(f"🛑 Kích hoạt Early Stopping ở epoch {epoch+1}. Validation Dice không tăng trong {EARLY_STOPPING_PATIENCE} epochs.")
+            break
 
 if __name__ == "__main__":
     main()
