@@ -756,7 +756,7 @@ if __name__ == "__main__":
 #     with open(json_path, 'r', encoding='utf-8') as f:
 #         data = json.load(f)
         
-#     # TỰ ĐỘNG TÌM SHAPE LÀ POLYGON CHUẨN ĐỂ VẼ
+#     # Tự động tìm đa giác chuẩn
 #     target_shape = None
 #     target_idx = 0
 #     for idx, s in enumerate(data.get('shapes', [])):
@@ -799,7 +799,6 @@ if __name__ == "__main__":
 #     img_np  = image_r / 255.0
 #     gt_np   = mask_r.astype(np.float32)
 
-#     # Tính tâm hình học GT
 #     if gt_np.sum() > 0:
 #         ys_gt, xs_gt = np.where(gt_np == 1)
 #         cx_gt, cy_gt = xs_gt.mean(), ys_gt.mean()
@@ -819,7 +818,6 @@ if __name__ == "__main__":
 #         color = 'green' if not res['is_suspicious'] else 'red'
 #         status = "✓ Tin cậy" if not res['is_suspicious'] else "⚠ Nghi ngờ sai"
 
-#         # Tính tâm hình học dự đoán
 #         pred_m = res['mask']
 #         if pred_m.sum() > 0:
 #             ys_p, xs_p = np.where(pred_m == 1)
@@ -827,14 +825,16 @@ if __name__ == "__main__":
 #         else:
 #             cx_p, cy_p = None, None
 
+#         # Cột 0: Ảnh gốc
 #         axes[row][0].imshow(img_np, cmap='gray')
 #         axes[row][0].set_ylabel(f"{label}\n{status}", fontsize=10, color=color, fontweight='bold', rotation=0, labelpad=70, va='center')
 
+#         # Cột 1: Prompt
 #         axes[row][1].imshow(img_np, cmap='gray')
 #         axes[row][1].imshow(np.ma.masked_where(pm_r < 0.05, pm_r), cmap='magma', alpha=0.6)
 #         axes[row][1].set_title(f"Prompt\nConf: {res['confidence']:.3f}", fontsize=9)
 
-#         # Cột GT xanh lá trong suốt + Chấm tâm
+#         # Cột 2: GT mẫu xanh trong suốt
 #         axes[row][2].imshow(img_np, cmap='gray')
 #         green_overlay = np.zeros((*gt_np.shape, 4))
 #         green_overlay[gt_np == 1] = [0, 1, 0, 0.35]
@@ -845,7 +845,7 @@ if __name__ == "__main__":
 #             axes[row][2].plot(cx_gt, cy_gt, marker='o', color='lime', markersize=8, alpha=1.0, markeredgecolor='black')
 #         axes[row][2].set_title("Ground Truth", fontsize=9)
 
-#         # Cột Dự đoán đỏ trong suốt + Chấm tâm
+#         # Cột 3: Dự đoán mẫu đỏ trong suốt
 #         axes[row][3].imshow(img_np, cmap='gray')
 #         red_overlay = np.zeros((*pred_m.shape, 4))
 #         red_overlay[pred_m == 1] = [1, 0, 0, 0.35]
@@ -854,12 +854,18 @@ if __name__ == "__main__":
 #             axes[row][3].plot(cx_p, cy_p, marker='o', color='red', markersize=8, alpha=1.0, markeredgecolor='white')
 #         axes[row][3].set_title(f"Dự đoán\nDist tâm: {res['center_dist']:.1f}px", fontsize=9)
 
+#         # Cột 4: CẢI TIẾN ĐÈ BẢN ĐỒ NHIỆT LÊN ẢNH GỐC
+#         axes[row][4].imshow(img_np, cmap='gray') # 1. Vẽ ảnh nền X-quang trước
+        
 #         if res['saliency'] is not None:
-#             axes[row][4].imshow(img_np, cmap='gray')
-#             axes[row][4].imshow(res['saliency'], cmap='hot', alpha=0.6)
+#             sal = res['saliency']
+#             # 2. Lọc bỏ vùng lạnh (<0.15), dùng màu 'jet' rực rỡ để đè quầng sáng lên cấu trúc xương giải phẫu
+#             axes[row][4].imshow(np.ma.masked_where(sal < 0.15, sal), cmap='jet', alpha=0.55)
 #             axes[row][4].set_title("GradCAM\n(gợi ý vùng u)", fontsize=9, color='orange')
 #         else:
-#             axes[row][4].imshow(res['prob_map'], cmap='RdYlGn')
+#             prob = res['prob_map']
+#             # Tương tự cho Probability map nếu không kích hoạt GradCAM
+#             axes[row][4].imshow(np.ma.masked_where(prob < 0.15, prob), cmap='RdYlGn', alpha=0.55)
 #             axes[row][4].set_title("Probability map", fontsize=9)
 
 #         for ax in axes[row]:

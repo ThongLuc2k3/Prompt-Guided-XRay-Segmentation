@@ -20,7 +20,7 @@
 - python train.py
 # → checkpoints/pga_unet_expA_best.pth
 - python test_expA.py
-# → in bảng 6 metrics, lưu ảnh result_expA_*.png
+# → in bảng 6 metrics, show các ảnh test (cần show ảnh nào thì ghi tên ảnh đó ở int main)
 
 ## Bước 3 – Thí nghiệm A + Encoder Prompt (so sánh với bước 2)
 # Trong train.py: EXPERIMENT='A', USE_ENCODER_PROMPT=True
@@ -33,5 +33,5 @@
 - python train.py
 # → checkpoints/pga_unet_expB_best.pth
 - python test_expB.py
-# → bảng 3 kịch bản, ảnh result_expB_*.png
+# → bảng 3 kịch bản, how các ảnh test (cần show ảnh nào thì ghi tên ảnh đó ở int main)
 # → ảnh result_inference_check_*.png (cải tiến inference)
