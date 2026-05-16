@@ -71,7 +71,7 @@ def evaluate():
     print("TEST – Thí nghiệm A: Zoom-out only")
     print("=" * 70)
 
-    model = PGA_UNet(in_channels=1, n_classes=1, use_encoder_prompt=False).to(DEVICE)
+    model = PGA_UNet(in_channels=1, n_classes=1, use_encoder_prompt=True).to(DEVICE)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True))
     model.eval()
 
