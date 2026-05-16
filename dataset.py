@@ -3,133 +3,175 @@ import cv2
 import json
 import torch
 import numpy as np
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 from torchvision.transforms import InterpolationMode
 import random
 
-class BTXRD_Dataset(Dataset):
-    def __init__(self, image_dir, json_dir, img_size=512, is_train=True):
-        self.image_dir = image_dir
-        self.json_dir = json_dir  
-        self.img_size = img_size
-        self.is_train = is_train
-        
-        self.all_samples = []
 
-        img_files = [f for f in os.listdir(image_dir) if f.endswith(('.png', '.jpg'))]
-        for img_name in img_files:
-            base_name = os.path.splitext(img_name)[0]
-            json_path = os.path.join(json_dir, base_name + '.json')
-            
-            if os.path.exists(json_path):
-                with open(json_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    polygon_shapes = [i for i, s in enumerate(data.get('shapes', [])) 
-                                    if s.get('shape_type') == 'polygon']
-                    for shape_idx in polygon_shapes:
-                        self.all_samples.append((img_name, shape_idx))
+class BTXRD_Dataset(Dataset):
+    """
+    Mỗi sample = 1 polygon GT trong 1 ảnh.
+    1 ảnh nhiều polygon → nhiều sample (1GT-1Prompt).
+
+    prompt_mode:
+        'zoom_out'   – prompt bao trọn GT, mở rộng ra ngoài
+        'shift'      – zoom_out + dịch tâm (vẫn giao GT ≥ 30%)
+        'mixed_7_3'  – 70% zoom_out + 30% shift (train: random, test: deterministic by idx)
+    """
+
+    def __init__(self, image_dir, json_dir, img_size=512, is_train=True,
+                 prompt_mode='zoom_out',
+                 zoom_ratio=(0.15, 0.45),
+                 shift_ratio=0.30):
+        self.image_dir   = image_dir
+        self.json_dir    = json_dir
+        self.img_size    = img_size
+        self.is_train    = is_train
+        self.prompt_mode = prompt_mode
+        self.zoom_ratio  = zoom_ratio
+        self.shift_ratio = shift_ratio
+
+        self.all_samples = []
+        for img_name in sorted(os.listdir(image_dir)):
+            if not img_name.endswith(('.png', '.jpg')):
+                continue
+            base = os.path.splitext(img_name)[0]
+            json_path = os.path.join(json_dir, base + '.json')
+            if not os.path.exists(json_path):
+                continue
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            for i, s in enumerate(data.get('shapes', [])):
+                if s.get('shape_type') == 'polygon':
+                    self.all_samples.append((img_name, i))
 
     def __len__(self):
         return len(self.all_samples)
 
+    # ── Prompt helpers ────────────────────────────────────────────────
+
+    def _zoom_out_bbox(self, x_min, x_max, y_min, y_max, orig_h, orig_w):
+        """Mở rộng bbox đều ra ngoài GT. Train: asymmetric random. Test: fixed."""
+        gt_w, gt_h = x_max - x_min, y_max - y_min
+        lo, hi = self.zoom_ratio
+        if self.is_train:
+            r_l, r_r = random.uniform(lo, hi), random.uniform(lo, hi)
+            r_t, r_b = random.uniform(lo, hi), random.uniform(lo, hi)
+        else:
+            r = (lo + hi) / 2
+            r_l = r_r = r_t = r_b = r
+        bx_min = max(0,       x_min - gt_w * r_l)
+        bx_max = min(orig_w,  x_max + gt_w * r_r)
+        by_min = max(0,       y_min - gt_h * r_t)
+        by_max = min(orig_h,  y_max + gt_h * r_b)
+        return bx_min, bx_max, by_min, by_max
+
+    def _shift_bbox(self, x_min, x_max, y_min, y_max, orig_h, orig_w, seed_idx=None):
+        """Zoom-out rồi dịch tâm, đảm bảo overlap với GT ≥ 30%."""
+        gt_w, gt_h = x_max - x_min, y_max - y_min
+        bx_min, bx_max, by_min, by_max = self._zoom_out_bbox(
+            x_min, x_max, y_min, y_max, orig_h, orig_w)
+
+        if self.is_train:
+            dx = random.uniform(-gt_w * self.shift_ratio, gt_w * self.shift_ratio)
+            dy = random.uniform(-gt_h * self.shift_ratio, gt_h * self.shift_ratio)
+        else:
+            rng = random.Random(seed_idx or 0)
+            dx = rng.uniform(gt_w * 0.4, gt_w * 0.7) * self.shift_ratio
+            dy = rng.uniform(gt_h * 0.1, gt_h * 0.3) * self.shift_ratio
+
+        bx_min = max(0,       bx_min + dx)
+        bx_max = min(orig_w,  bx_max + dx)
+        by_min = max(0,       by_min + dy)
+        by_max = min(orig_h,  by_max + dy)
+
+        # Đảm bảo overlap ≥ 30%
+        if min(bx_max, x_max) - max(bx_min, x_min) < gt_w * 0.3:
+            if dx > 0: bx_max = min(orig_w, x_max + gt_w * 0.15)
+            else:      bx_min = max(0,      x_min - gt_w * 0.15)
+        if min(by_max, y_max) - max(by_min, y_min) < gt_h * 0.3:
+            if dy > 0: by_max = min(orig_h, y_max + gt_h * 0.15)
+            else:      by_min = max(0,      y_min - gt_h * 0.15)
+
+        return bx_min, bx_max, by_min, by_max
+
     def create_plateau_heatmap(self, bbox, orig_h, orig_w):
         heatmap = np.zeros((orig_h, orig_w), dtype=np.float32)
         x_min, y_min, x_max, y_max = bbox
-        
-        padding = 5
-        x_min, y_min = max(0, int(x_min - padding)), max(0, int(y_min - padding))
-        x_max, y_max = min(orig_w, int(x_max + padding)), min(orig_h, int(y_max + padding))
+        x_min = max(0, int(x_min - 5))
+        y_min = max(0, int(y_min - 5))
+        x_max = min(orig_w, int(x_max + 5))
+        y_max = min(orig_h, int(y_max + 5))
+        if x_max > x_min and y_max > y_min:
+            heatmap[y_min:y_max, x_min:x_max] = 1.0
+            heatmap = cv2.GaussianBlur(heatmap, (31, 31), 0)
+        return heatmap
 
-        heatmap[y_min:y_max, x_min:x_max] = 1.0
-        return cv2.GaussianBlur(heatmap, (31, 31), 0)
+    # ── Main ──────────────────────────────────────────────────────────
 
     def __getitem__(self, idx):
         img_name, shape_idx = self.all_samples[idx]
-        base_name = os.path.splitext(img_name)[0]
-        
-        img_path = os.path.join(self.image_dir, img_name)
-        json_path = os.path.join(self.json_dir, base_name + '.json')
+        base = os.path.splitext(img_name)[0]
 
-        image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        image = cv2.imread(os.path.join(self.image_dir, img_name), cv2.IMREAD_GRAYSCALE)
         orig_h, orig_w = image.shape
 
-        mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
-        prompt_map = np.zeros((orig_h, orig_w), dtype=np.float32)
-
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(os.path.join(self.json_dir, base + '.json'), 'r', encoding='utf-8') as f:
             data = json.load(f)
-            points = np.array(data['shapes'][shape_idx]['points'])
+        points = np.array(data['shapes'][shape_idx]['points'])
 
-            pts = points.astype(np.int32)
-            cv2.fillPoly(mask, [pts], 255)
+        mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
+        cv2.fillPoly(mask, [points.astype(np.int32)], 255)
 
-            x_min, y_min = np.min(points, axis=0)
-            x_max, y_max = np.max(points, axis=0)
-                        
-            if self.is_train:
-                # ĐÒN 1: ZOOM
-                gt_w, gt_h = x_max - x_min, y_max - y_min
-                ratio_w = random.uniform(0.9, 1.2) if gt_w < 100 else random.uniform(0.3, 0.5)
-                ratio_h = random.uniform(0.9, 1.2) if gt_h < 100 else random.uniform(0.3, 0.5)
+        x_min, y_min = np.min(points, axis=0)
+        x_max, y_max = np.max(points, axis=0)
 
-                pad_w, pad_h = gt_w * ratio_w, gt_h * ratio_h
-                shift_w, shift_h = random.uniform(0, pad_w), random.uniform(0, pad_h)
-                
-                x_min -= shift_w
-                x_max += (pad_w - shift_w)
-                y_min -= shift_h
-                y_max += (pad_h - shift_h)
+        # Chọn prompt bbox theo mode
+        if self.prompt_mode == 'zoom_out':
+            bx_min, bx_max, by_min, by_max = self._zoom_out_bbox(
+                x_min, x_max, y_min, y_max, orig_h, orig_w)
 
-                # Cấp quyền thực hiện các đòn nguy hiểm
-                apply_other_tricks = random.random() < 0.5 
+        elif self.prompt_mode == 'shift':
+            bx_min, bx_max, by_min, by_max = self._shift_bbox(
+                x_min, x_max, y_min, y_max, orig_h, orig_w, seed_idx=idx)
 
-                # ĐÒN 2: RANDOM SHIFT (Độc lập xác suất)
-                if apply_other_tricks and random.random() < 0.60:
-                    side = random.choice(["left", "right", "top", "bottom"])
-                    cut_ratio = random.uniform(0.1, 0.3)
-                    if side == "left": x_min += int(gt_w * cut_ratio)
-                    elif side == "right": x_max -= int(gt_w * cut_ratio)
-                    elif side == "top": y_min += int(gt_h * cut_ratio)
-                    elif side == "bottom": y_max -= int(gt_h * cut_ratio)
+        elif self.prompt_mode == 'mixed_7_3':
+            use_shift = (random.random() < 0.3) if self.is_train else (idx % 10 >= 7)
+            if use_shift:
+                bx_min, bx_max, by_min, by_max = self._shift_bbox(
+                    x_min, x_max, y_min, y_max, orig_h, orig_w, seed_idx=idx)
+            else:
+                bx_min, bx_max, by_min, by_max = self._zoom_out_bbox(
+                    x_min, x_max, y_min, y_max, orig_h, orig_w)
+        else:
+            raise ValueError(f"Unknown prompt_mode: {self.prompt_mode}")
 
-            x_min, y_min = max(0, int(x_min)), max(0, int(y_min))
-            x_max, y_max = min(orig_w, int(x_max)), min(orig_h, int(y_max))
-            
-            single_heatmap = self.create_plateau_heatmap([x_min, y_min, x_max, y_max], orig_h, orig_w)
-            prompt_map = np.maximum(prompt_map, single_heatmap)
-                        
-            # ĐÒN 3: BẪY PROMPT GIẢ (Độc lập xác suất)
-            if self.is_train and apply_other_tricks and random.random() < 0.30:
-                fake_w, fake_h = random.randint(100, 200), random.randint(100, 200)
-                fake_x = random.randint(0, max(1, orig_w - fake_w))
-                fake_y = random.randint(0, max(1, orig_h - fake_h))
-                fake_heatmap = self.create_plateau_heatmap([fake_x, fake_y, fake_x + fake_w, fake_y + fake_h], orig_h, orig_w)
-                prompt_map = np.maximum(prompt_map, fake_heatmap)
+        prompt_map = self.create_plateau_heatmap(
+            [bx_min, by_min, bx_max, by_max], orig_h, orig_w)
 
-        image = cv2.resize(image, (self.img_size, self.img_size))
-        mask = cv2.resize(mask, (self.img_size, self.img_size), interpolation=cv2.INTER_NEAREST)
+        # Resize & normalize
+        image      = cv2.resize(image, (self.img_size, self.img_size))
+        mask       = cv2.resize(mask, (self.img_size, self.img_size),
+                                interpolation=cv2.INTER_NEAREST)
         prompt_map = cv2.resize(prompt_map, (self.img_size, self.img_size))
 
-        # Chuẩn hóa Z-score cho ảnh X-quang (Mean/Std có thể điều chỉnh theo tập data thực tế)
-        image = image.astype(np.float32) / 255.0
-        image = (image - 0.5) / 0.5 
-        mask = (mask > 127).astype(np.float32)
+        image = (image.astype(np.float32) / 255.0 - 0.5) / 0.5
+        mask  = (mask > 127).astype(np.float32)
 
-        image = torch.from_numpy(image).unsqueeze(0)
-        mask = torch.from_numpy(mask).unsqueeze(0)
+        image  = torch.from_numpy(image).unsqueeze(0)
+        mask   = torch.from_numpy(mask).unsqueeze(0)
         prompt = torch.from_numpy(prompt_map).unsqueeze(0)
 
-        # ĐÒN 5: ĐỒNG BỘ HÌNH HỌC 
+        # Augmentation đồng bộ (chỉ train)
         if self.is_train:
             if random.random() >= 0.5:
                 image, mask, prompt = TF.hflip(image), TF.hflip(mask), TF.hflip(prompt)
-                
             if random.random() >= 0.5:
-                angle = random.uniform(-15, 15)
-                image = TF.rotate(image, angle, interpolation=InterpolationMode.BILINEAR)
-                mask = TF.rotate(mask, angle, interpolation=InterpolationMode.NEAREST)
+                angle  = random.uniform(-15, 15)
+                image  = TF.rotate(image,  angle, interpolation=InterpolationMode.BILINEAR)
+                mask   = TF.rotate(mask,   angle, interpolation=InterpolationMode.NEAREST)
                 prompt = TF.rotate(prompt, angle, interpolation=InterpolationMode.BILINEAR)
-                
+
         mask = (mask > 0.5).float()
         return image, mask, prompt
