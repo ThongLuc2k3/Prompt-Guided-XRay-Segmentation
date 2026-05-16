@@ -14,7 +14,7 @@ from models.networks.prompt_unet_2D import PGA_UNet
 # CẤU HÌNH – chỉ đổi ở đây khi chuyển thí nghiệm
 # =========================================================
 EXPERIMENT         = 'A'     # 'A' → zoom_out only | 'B' → mixed_7_3
-USE_ENCODER_PROMPT = True    # True để bật PromptSpatialGate ở encoder
+USE_ENCODER_PROMPT = False    # True để bật PromptSpatialGate ở encoder
 DEVICE     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 4
 EPOCHS     = 100
