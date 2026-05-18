@@ -5,6 +5,7 @@ test_inference_gradcam.py
 Cải tiến inference:
   1. Phát hiện prompt sai (confidence thấp HOẶC tâm pred lệch xa tâm prompt)
   2. Khi nghi ngờ → kích hoạt GradCAM từ bottleneck để gợi ý vùng u thật sự
+  3. Đo độ chính xác của gợi ý bằng chỉ số CBL (Khoảng cách Tâm u vs Điểm gợi ý)
 
 Visualize: 2 rows (Prompt ĐÚNG | Prompt SAI) × 5 cols
   Col: Ảnh gốc | Prompt | Ground Truth | Dự đoán | GradCAM / Prob map
@@ -29,7 +30,7 @@ from models.networks.prompt_unet_2D import PGA_UNet
 # CẤU HÌNH – chỉnh tại đây
 # =========================================================
 DEVICE             = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MODEL_PATH         = "checkpoints/pga_unet_expA_best.pth"
+MODEL_PATH         = "checkpoints/pga_unet_expB_best.pth"
 IMG_SIZE           = 512
 USE_ENCODER_PROMPT = True
 
@@ -67,7 +68,7 @@ def calc_hd95(pred: np.ndarray, gt: np.ndarray) -> float:
 
 
 def calc_cbl(pred_bin: np.ndarray, gt_bin: np.ndarray):
-    """CBL [0,1]. Trả về None nếu GT rỗng."""
+    """CBL [0,1] cho mảng dự đoán. Trả về None nếu GT rỗng."""
     if gt_bin.sum() == 0:
         return None
     ys, xs = np.where(gt_bin)
@@ -78,6 +79,18 @@ def calc_cbl(pred_bin: np.ndarray, gt_bin: np.ndarray):
     yp, xp = np.where(pred_bin)
     d = np.sqrt((xp.mean() - xs.mean()) ** 2 +
                 (yp.mean() - ys.mean()) ** 2)
+    return float(np.clip(1.0 - d / gt_diag, 0.0, 1.0))
+
+def calc_cbl_point(px: float, py: float, gt_bin: np.ndarray):
+    """CBL [0,1] đo độ lệch từ 1 điểm (ngôi sao gợi ý) tới tâm GT."""
+    if gt_bin.sum() == 0:
+        return None
+    ys, xs = np.where(gt_bin)
+    gt_diag = np.sqrt((ys.max() - ys.min()) ** 2 +
+                      (xs.max() - xs.min()) ** 2) + 1e-6
+    cx_gt = float(xs.mean())
+    cy_gt = float(ys.mean())
+    d = np.sqrt((px - cx_gt) ** 2 + (py - cy_gt) ** 2)
     return float(np.clip(1.0 - d / gt_diag, 0.0, 1.0))
 
 
@@ -153,14 +166,6 @@ def predict_with_check(model:         torch.nn.Module,
                        prompt_tensor: torch.Tensor) -> dict:
     """
     Chạy inference và kiểm tra độ tin cậy.
-
-    Tiêu chí nghi ngờ prompt sai (1 trong 2 thoả):
-      (a) max(sigmoid(output)) < CONFIDENCE_THRESHOLD
-      (b) dist(tâm_pred, tâm_prompt) > CENTER_DIST_RATIO × IMG_SIZE
-
-    Kết quả trả về:
-      mask, prob_map, confidence, center_dist,
-      cx_pred, cy_pred, is_suspicious, saliency
     """
     model.eval()
     img_t = img_tensor.to(DEVICE)
@@ -214,7 +219,6 @@ def predict_with_check(model:         torch.nn.Module,
 
 # =========================================================
 # VISUALIZE 1 ẢNH: PROMPT ĐÚNG vs PROMPT SAI
-# 2 rows × 5 cols
 # =========================================================
 
 def visualize_inference_check(model: torch.nn.Module, img_name: str):
@@ -391,26 +395,32 @@ def visualize_inference_check(model: torch.nn.Module, img_name: str):
         axes[row][4].imshow(img_np, cmap='gray')
         if res['saliency'] is not None:
             sal = res['saliency']
-            # Chỉ vẽ vùng nóng (> 0.2) để tránh nhiễu nền
             axes[row][4].imshow(
                 np.ma.masked_where(sal < 0.20, sal),
                 cmap='jet', alpha=0.55
             )
-            # Đánh dấu đỉnh CAM → vị trí model gợi ý xem thêm
+            
+            # Tính CBL cho gợi ý
             peak_y, peak_x = np.unravel_index(sal.argmax(), sal.shape)
+            sugg_cbl = calc_cbl_point(peak_x, peak_y, gt_np)
+            
             axes[row][4].plot(
                 peak_x, peak_y, '*',
                 color='yellow', ms=14,
                 markeredgecolor='black', markeredgewidth=0.8,
                 label='Đỉnh CAM\n(gợi ý)'
             )
+            
+            title_str = "GradCAM  ★ = gợi ý"
+            if sugg_cbl is not None:
+                title_str += f"\nCBL gợi ý: {sugg_cbl:.3f}"
+                
             axes[row][4].set_title(
-                "GradCAM  ★ = gợi ý vùng u",
+                title_str,
                 fontsize=9, color='orange', fontweight='bold'
             )
             axes[row][4].legend(fontsize=7, loc='lower right')
         else:
-            # Prompt tin cậy → chỉ show probability map
             prob = res['prob_map']
             axes[row][4].imshow(
                 np.ma.masked_where(prob < 0.10, prob),
